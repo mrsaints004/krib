@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    /* shadcn CSS variables mapped to UniNest tokens */
+    --background: 40 33% 96%; /* paper-50 #F7F5F0 */
+    --foreground: 218 30% 9%; /* ink-900 #12151B */
+
+    --card: 40 33% 96%;
+    --card-foreground: 218 30% 9%;
+
+    --popover: 40 33% 96%;
+    --popover-foreground: 218 30% 9%;
+
+    --primary: 165 56% 28%; /* verified #1E6F5C */
+    --primary-foreground: 40 33% 96%;
+
+    --secondary: 27 29% 55%; /* clay #B08968 */
+    --secondary-foreground: 40 33% 96%;
+
+    --muted: 37 20% 92%; /* paper-100 #EFEBE3 */
+    --muted-foreground: 218 14% 40%;
+
+    --accent: 165 56% 28%;
+    --accent-foreground: 40 33% 96%;
+
+    --destructive: 4 52% 47%; /* signal #B5423A */
+    --destructive-foreground: 40 33% 96%;
+
+    --border: 218 14% 40% / 0.15;
+    --input: 218 14% 40% / 0.15;
+    --ring: 165 56% 28%;
+
+    --radius: 0.5rem;
+  }
+}
+
+body {
+  background-color: theme("colors.paper.50");
+  color: theme("colors.ink.900");
+}

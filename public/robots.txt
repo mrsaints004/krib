@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /student/
+Disallow: /landlord/
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://uninest.ng/sitemap.xml
