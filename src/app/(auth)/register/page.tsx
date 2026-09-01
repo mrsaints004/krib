@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -68,6 +68,37 @@ export default function RegisterPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // Client-side rate limiting: lock form after 5 consecutive failures
+  const failCountRef = useRef(0);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [lockCountdown, setLockCountdown] = useState(0);
+
+  const isLocked = lockedUntil !== null && Date.now() < lockedUntil;
+
+  useEffect(() => {
+    if (!lockedUntil) return;
+    const tick = () => {
+      const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setLockedUntil(null);
+        setLockCountdown(0);
+        failCountRef.current = 0;
+      } else {
+        setLockCountdown(remaining);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockedUntil]);
+
+  const recordFailure = useCallback(() => {
+    failCountRef.current += 1;
+    if (failCountRef.current >= 5) {
+      setLockedUntil(Date.now() + 30_000);
+    }
+  }, []);
+
   const steps = role === "student" ? 4 : 3;
   const [step, setStep] = useState(1);
 
@@ -98,6 +129,7 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isLocked) return;
     setError(null);
 
     const pwResult = validatePassword(password);
@@ -108,28 +140,33 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName, phone, role, university: school },
-      },
-    });
+
+    let res: Response;
+    try {
+      res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          phone,
+          role,
+          university: school,
+        }),
+      });
+    } catch {
+      setLoading(false);
+      setError("Network error. Please check your connection and try again.");
+      return;
+    }
+
+    const json = await res.json();
     setLoading(false);
 
-    if (signUpError) {
-      // Map Supabase error messages to safe user-facing messages.
-      // Raw errors can leak info (e.g. confirming an email exists).
-      const msg = signUpError.message.toLowerCase();
-      if (msg.includes("already registered") || msg.includes("already been registered")) {
-        setError("An account with this email may already exist. Try logging in instead.");
-      } else if (msg.includes("password")) {
-        setError("Password does not meet requirements. Please use a stronger password.");
-      } else if (msg.includes("rate") || msg.includes("limit")) {
-        setError("Too many attempts. Please wait a moment and try again.");
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
+    if (!res.ok) {
+      recordFailure();
+      setError(json.error ?? "Something went wrong. Please try again.");
       return;
     }
 
@@ -183,7 +220,7 @@ export default function RegisterPage() {
       {/* Minimal top bar */}
       <header className="flex items-center justify-between py-5">
         <Link href="/" className="font-display text-xl italic text-ink-950 hover:text-verified-dark transition-colors">
-          UniNest
+          Krib
         </Link>
         <Link href="/login" className="text-sm text-ink-800 hover:text-ink-950">
           Log in
@@ -286,7 +323,7 @@ export default function RegisterPage() {
                 Which school?
               </h1>
               <p className="mt-1 text-sm text-ink-800">
-                More schools are being added as UniNest expands.
+                More schools are being added as Krib expands.
               </p>
               <div className="mt-6 space-y-2">
                 {SCHOOLS.map((s) => (
@@ -453,8 +490,12 @@ export default function RegisterPage() {
                 <Button type="button" variant="ghost" onClick={goBack} className="px-5 py-3">
                   Back
                 </Button>
-                <Button type="submit" loading={loading} className="flex-1 py-3">
-                  {loading ? "Creating account\u2026" : "Create account"}
+                <Button type="submit" loading={loading} disabled={isLocked} className="flex-1 py-3">
+                  {isLocked
+                    ? `Too many attempts — ${lockCountdown}s`
+                    : loading
+                      ? "Creating account\u2026"
+                      : "Create account"}
                 </Button>
               </div>
             </div>

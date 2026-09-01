@@ -10,19 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Badge } from "@/components/ui/Badge";
-
-const AMENITY_OPTIONS = [
-  "Water",
-  "24hr light (generator)",
-  "Fenced compound",
-  "Tiled floor",
-  "Wardrobe",
-  "Kitchen",
-  "Bathroom (ensuite)",
-  "Security gate",
-  "Parking",
-  "Fan",
-];
+import { isValidPhotoUrl, AMENITY_OPTIONS } from "@/lib/validation";
 
 const DEFECT_SEVERITIES = ["minor", "moderate", "major"] as const;
 
@@ -95,7 +83,7 @@ export default function EditListingPage() {
     async function load() {
       const { data } = await supabase
         .from("listings")
-        .select("*")
+        .select("id, landlord_id, title, description, area_description, exact_address, distance_to_campus_km, rent_amount, rent_period, gender_preference, amenities, photo_urls, defects, status")
         .eq("id", params.id as string)
         .single();
 
@@ -141,27 +129,54 @@ export default function EditListingPage() {
     setDefectSev("minor");
   }
 
-  async function handleSave() {
+  function validateForm(): string | null {
+    if (!title.trim()) return "Title is required.";
+    if (title.trim().length > 200) return "Title must be 200 characters or less.";
+    if (!description.trim()) return "Description is required.";
+    if (!areaDescription.trim()) return "Area description is required.";
+    if (!exactAddress.trim()) return "Exact address is required.";
+    const dist = Number(distanceToCampus);
+    if (!distanceToCampus || isNaN(dist) || dist < 0) return "Distance must be a non-negative number.";
+    const rent = Number(rentAmount);
+    if (!rentAmount || isNaN(rent) || rent <= 0) return "Rent must be a positive number.";
+    return null;
+  }
+
+  async function handleSave(resubmit = false) {
     if (!user) return;
+
+    const validationError = validateForm();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     setSaving(true);
 
     try {
       const rentKobo = Math.round(Number(rentAmount) * 100);
 
+      const updateData: Record<string, unknown> = {
+        title,
+        description,
+        area_description: areaDescription,
+        exact_address: exactAddress,
+        distance_to_campus_km: Number(distanceToCampus),
+        rent_amount: rentKobo,
+        rent_period: rentPeriod,
+        gender_preference: genderPreference,
+        amenities: Array.from(amenities),
+        defects: defects.length > 0 ? defects : [],
+      };
+
+      // When resubmitting a rejected listing, move it back to pending
+      if (resubmit && status === "rejected") {
+        updateData.status = "pending_verification";
+      }
+
       const { error } = await supabase
         .from("listings")
-        .update({
-          title,
-          description,
-          area_description: areaDescription,
-          exact_address: exactAddress,
-          distance_to_campus_km: Number(distanceToCampus),
-          rent_amount: rentKobo,
-          rent_period: rentPeriod,
-          gender_preference: genderPreference,
-          amenities: Array.from(amenities),
-          defects: defects.length > 0 ? defects : [],
-        })
+        .update(updateData)
         .eq("id", params.id as string)
         .eq("landlord_id", user!.id);
 
@@ -170,7 +185,7 @@ export default function EditListingPage() {
         return;
       }
 
-      toast.success("Listing updated");
+      toast.success(resubmit ? "Listing resubmitted for review" : "Listing updated");
       router.push("/landlord/listings");
     } catch {
       toast.error("Something went wrong. Please try again.");
@@ -224,7 +239,7 @@ export default function EditListingPage() {
               <div
                 key={i}
                 className="h-20 w-20 shrink-0 rounded-md bg-cover bg-center"
-                style={{ backgroundImage: `url(${url})` }}
+                style={{ backgroundImage: isValidPhotoUrl(url) ? `url(${url})` : undefined }}
               />
             ))}
           </div>
@@ -371,13 +386,26 @@ export default function EditListingPage() {
           </div>
         </div>
 
+        {status === "rejected" && (
+          <div className="rounded-md border border-signal/30 bg-signal-light px-4 py-3">
+            <p className="text-sm font-medium text-signal">
+              This listing was rejected. Make the necessary changes and resubmit for review.
+            </p>
+          </div>
+        )}
+
         <div className="flex gap-3">
           <Button variant="ghost" onClick={() => router.back()} className="flex-1">
             Cancel
           </Button>
-          <Button onClick={handleSave} loading={saving} className="flex-1">
+          <Button onClick={() => handleSave(false)} loading={saving} className="flex-1">
             Save changes
           </Button>
+          {status === "rejected" && (
+            <Button onClick={() => handleSave(true)} loading={saving} className="flex-1">
+              Resubmit for review
+            </Button>
+          )}
         </div>
       </div>
     </main>

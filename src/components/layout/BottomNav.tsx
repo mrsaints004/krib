@@ -19,7 +19,7 @@ export function BottomNav() {
     <nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-20 border-t border-ink-900/10 bg-paper-50/95 backdrop-blur md:hidden">
       <div className="mx-auto flex max-w-md items-stretch justify-around">
         {TABS.map(({ href, label, Icon }) => {
-          const active = pathname === href;
+          const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <Link
               key={href}

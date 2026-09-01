@@ -4,7 +4,7 @@ interface VerifiedStampProps {
 }
 
 /**
- * The signature element of UniNest's design system.
+ * The signature element of Krib's design system.
  * Evokes an official document stamp — deliberately not a generic
  * checkmark badge — because the product's entire promise is that
  * something was actually inspected and verified, not just uploaded.

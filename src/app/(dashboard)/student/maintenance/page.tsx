@@ -133,7 +133,7 @@ export default function StudentMaintenancePage() {
     // Upload photos if any
     const uploadedUrls: string[] = [];
     for (const photo of photos) {
-      const result = validateFileUpload(photo, ALLOWED_IMAGE_TYPES);
+      const result = await validateFileUpload(photo, ALLOWED_IMAGE_TYPES);
       if (!result.valid) {
         toast.error(result.error ?? "Invalid file");
         setSubmitting(false);
@@ -328,7 +328,14 @@ export default function StudentMaintenancePage() {
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 5) {
+                    toast.error("Maximum 5 photos per request.");
+                    return;
+                  }
+                  setPhotos(files);
+                }}
                 className="hidden"
               />
             </label>

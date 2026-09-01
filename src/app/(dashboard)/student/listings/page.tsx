@@ -10,6 +10,7 @@ import { ListingCardSkeleton } from "@/components/skeletons/ListingCardSkeleton"
 import { EmptyState } from "@/components/ui/EmptyState";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthProvider";
+import { isValidPhotoUrl } from "@/lib/validation";
 
 interface ListingRow {
   id: string;
@@ -39,7 +40,7 @@ const PRICE_RANGES = [
 
 const PAGE_SIZE = 20;
 
-const FAVORITES_KEY = "uninest_favorites";
+const FAVORITES_KEY = "krib_favorites";
 
 function loadFavorites(): Set<string> {
   try {
@@ -167,7 +168,7 @@ export default function StudentListingsPage() {
       {/* Top bar */}
       <header className="sticky top-0 z-10 border-b border-ink-900/10 bg-paper-50/95 px-5 py-4 backdrop-blur">
         <div className="flex items-center justify-between">
-          <span className="font-display text-lg italic text-ink-950 md:hidden">UniNest</span>
+          <span className="font-display text-lg italic text-ink-950 md:hidden">Krib</span>
           <h1 className="hidden font-display text-lg text-ink-950 md:block">Browse listings</h1>
           <div className="h-8 w-8 rounded-full bg-ink-900/10" />
         </div>
@@ -179,11 +180,14 @@ export default function StudentListingsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={`Search near ${university}...`}
+            aria-label="Search listings"
             className="w-full bg-transparent text-sm text-ink-950 outline-none placeholder:text-ink-800/40"
           />
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}
+            aria-label="Toggle filters"
+            aria-expanded={showFilters}
             className={showFilters ? "text-verified" : "text-ink-800/50"}
           >
             <SlidersHorizontal size={16} />
@@ -277,10 +281,12 @@ export default function StudentListingsPage() {
               >
                 <BracketFrame>
                   <div className="relative overflow-hidden rounded-lg border border-ink-900/10 bg-ink-950">
-                    {listing.photo_urls.length > 0 ? (
+                    {listing.photo_urls.length > 0 && isValidPhotoUrl(listing.photo_urls[0]) ? (
                       <div
+                        role="img"
+                        aria-label={`Photo of ${listing.title}`}
                         className="aspect-[16/10] bg-ink-900 bg-cover bg-center"
-                        style={{ backgroundImage: `url(${listing.photo_urls[0]})` }}
+                        style={{ backgroundImage: `url(${encodeURI(listing.photo_urls[0]!)})` }}
                       />
                     ) : (
                       <div className="flex aspect-[16/10] items-center justify-center bg-ink-900">
@@ -289,6 +295,7 @@ export default function StudentListingsPage() {
                     )}
                     <button
                       onClick={(e) => toggleFavorite(listing.id, e)}
+                      aria-label={favorites.has(listing.id) ? "Remove from favorites" : "Add to favorites"}
                       className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-ink-950/60 backdrop-blur"
                     >
                       <Heart

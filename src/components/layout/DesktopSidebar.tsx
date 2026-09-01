@@ -25,6 +25,7 @@ const STUDENT_LINKS = [
 const LANDLORD_LINKS = [
   { href: "/landlord/listings", label: "Listings", Icon: Home },
   { href: "/landlord/messages", label: "Messages", Icon: MessageCircle },
+  { href: "/landlord/maintenance", label: "Maintenance", Icon: Wrench },
   { href: "/landlord/profile", label: "Profile", Icon: User },
 ];
 
@@ -50,7 +51,7 @@ export function DesktopSidebar() {
         {/* Logo */}
         <Link href="/" className="px-3">
           <span className="font-display text-xl italic text-ink-950">
-            UniNest
+            Krib
           </span>
         </Link>
 

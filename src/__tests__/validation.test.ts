@@ -100,46 +100,66 @@ describe("sanitizeText", () => {
 });
 
 describe("validateFileUpload", () => {
-  function makeFile(name: string, type: string, size: number): File {
+  // JPEG magic bytes: FF D8 FF
+  const JPEG_HEADER = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+  // PNG magic bytes: 89 50 4E 47
+  const PNG_HEADER = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  // PDF magic bytes: %PDF
+  const PDF_HEADER = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+
+  function makeFile(name: string, type: string, size: number, header?: Uint8Array): File {
+    if (header) {
+      const remaining = Math.max(0, size - header.length);
+      const filler = new ArrayBuffer(remaining);
+      return new File([header, filler], name, { type });
+    }
     const buffer = new ArrayBuffer(size);
     return new File([buffer], name, { type });
   }
 
-  it("accepts valid JPEG image", () => {
-    const file = makeFile("photo.jpg", "image/jpeg", 1024);
-    expect(validateFileUpload(file, ALLOWED_IMAGE_TYPES).valid).toBe(true);
+  it("accepts valid JPEG image with correct magic bytes", async () => {
+    const file = makeFile("photo.jpg", "image/jpeg", 1024, JPEG_HEADER);
+    expect((await validateFileUpload(file, ALLOWED_IMAGE_TYPES)).valid).toBe(true);
   });
 
-  it("rejects invalid MIME type", () => {
+  it("rejects invalid MIME type", async () => {
     const file = makeFile("script.js", "application/javascript", 100);
-    const result = validateFileUpload(file, ALLOWED_IMAGE_TYPES);
+    const result = await validateFileUpload(file, ALLOWED_IMAGE_TYPES);
     expect(result.valid).toBe(false);
     expect(result.error).toContain("Invalid file type");
   });
 
-  it("rejects mismatched extension", () => {
-    const file = makeFile("photo.exe", "image/jpeg", 1024);
-    const result = validateFileUpload(file, ALLOWED_IMAGE_TYPES);
+  it("rejects mismatched extension", async () => {
+    const file = makeFile("photo.exe", "image/jpeg", 1024, JPEG_HEADER);
+    const result = await validateFileUpload(file, ALLOWED_IMAGE_TYPES);
     expect(result.valid).toBe(false);
     expect(result.error).toContain("Invalid file extension");
   });
 
-  it("rejects files over size limit", () => {
-    const file = makeFile("big.jpg", "image/jpeg", 11 * 1024 * 1024);
-    const result = validateFileUpload(file, ALLOWED_IMAGE_TYPES);
+  it("rejects files over size limit", async () => {
+    const file = makeFile("big.jpg", "image/jpeg", 11 * 1024 * 1024, JPEG_HEADER);
+    const result = await validateFileUpload(file, ALLOWED_IMAGE_TYPES);
     expect(result.valid).toBe(false);
     expect(result.error).toContain("too large");
   });
 
-  it("rejects empty files", () => {
+  it("rejects empty files", async () => {
     const file = makeFile("empty.jpg", "image/jpeg", 0);
-    const result = validateFileUpload(file, ALLOWED_IMAGE_TYPES);
+    const result = await validateFileUpload(file, ALLOWED_IMAGE_TYPES);
     expect(result.valid).toBe(false);
     expect(result.error).toContain("empty");
   });
 
-  it("accepts PDF for document types", () => {
-    const file = makeFile("doc.pdf", "application/pdf", 1024);
-    expect(validateFileUpload(file, ALLOWED_DOC_TYPES).valid).toBe(true);
+  it("accepts PDF for document types", async () => {
+    const file = makeFile("doc.pdf", "application/pdf", 1024, PDF_HEADER);
+    expect((await validateFileUpload(file, ALLOWED_DOC_TYPES)).valid).toBe(true);
+  });
+
+  it("rejects file with spoofed MIME type (wrong magic bytes)", async () => {
+    // File claims to be JPEG but has PNG magic bytes
+    const file = makeFile("fake.jpg", "image/jpeg", 1024, PNG_HEADER);
+    const result = await validateFileUpload(file, ALLOWED_IMAGE_TYPES);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("contents do not match");
   });
 });

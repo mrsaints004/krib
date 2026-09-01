@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, MapPin, AlertTriangle, MessageCircle } from "lucide-react";
 import { Dialog, DialogTitle, DialogDescription, DialogFooter, Lightbox } from "@/components/ui/Dialog";
@@ -11,6 +10,7 @@ import { DetailSkeleton } from "@/components/skeletons/DetailSkeleton";
 import { Button } from "@/components/ui/Button";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthProvider";
+import { isValidPhotoUrl } from "@/lib/validation";
 
 interface ListingDetail {
   id: string;
@@ -127,33 +127,24 @@ export default function ListingDetailPage() {
     setBookingLoading(true);
 
     try {
-      const feeRate = 0.05;
-      const maxFeeKobo = 1000000;
-      const facilitation = Math.min(
-        Math.round(listing.rent_amount * feeRate),
-        maxFeeKobo
+      // Fee is computed server-side in the create_booking function
+      const { data: bookingId, error } = await supabase.rpc(
+        "create_booking",
+        {
+          p_listing_id: listing.id,
+          p_student_id: user.id,
+        }
       );
-      const total = listing.rent_amount + facilitation;
-
-      const { data: booking, error } = await supabase
-        .from("bookings")
-        .insert({
-          listing_id: listing.id,
-          student_id: user.id,
-          landlord_id: listing.landlord_id,
-          rent_amount: listing.rent_amount,
-          facilitation_fee: facilitation,
-          total_amount: total,
-          status: "pending_payment",
-          payment_status: "unpaid",
-        })
-        .select("id")
-        .single();
 
       setConfirmOpen(false);
 
-      if (error || !booking) {
-        toast.error("Booking failed. Please try again.");
+      if (error || !bookingId) {
+        const msg = error?.message?.toLowerCase() ?? "";
+        if (msg.includes("not available") || msg.includes("duplicate") || msg.includes("unique") || msg.includes("already exists")) {
+          toast.error("This listing is no longer available for booking.");
+        } else {
+          toast.error("Booking failed. Please try again.");
+        }
         return;
       }
 
@@ -204,7 +195,7 @@ export default function ListingDetailPage() {
                 >
                   <div
                     className="aspect-[4/3] bg-cover bg-center md:rounded-lg"
-                    style={{ backgroundImage: `url(${listing.photo_urls[photoIdx]})` }}
+                    style={{ backgroundImage: listing.photo_urls[photoIdx] && isValidPhotoUrl(listing.photo_urls[photoIdx]) ? `url(${listing.photo_urls[photoIdx]})` : undefined }}
                   />
                 </button>
               ) : (
@@ -214,6 +205,7 @@ export default function ListingDetailPage() {
               )}
               <button
                 onClick={() => router.back()}
+                aria-label="Go back"
                 className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-ink-950/60 text-paper-50 backdrop-blur md:hidden"
               >
                 <ArrowLeft size={18} />
@@ -225,6 +217,7 @@ export default function ListingDetailPage() {
                     <button
                       key={i}
                       onClick={() => setPhotoIdx(i)}
+                      aria-label={`View photo ${i + 1}`}
                       className={`h-2 w-2 rounded-full ${
                         i === photoIdx ? "bg-paper-50" : "bg-paper-50/40"
                       }`}
@@ -244,7 +237,7 @@ export default function ListingDetailPage() {
                     className={`h-16 w-16 shrink-0 rounded-md bg-cover bg-center border-2 ${
                       i === photoIdx ? "border-verified" : "border-transparent opacity-60"
                     }`}
-                    style={{ backgroundImage: `url(${url})` }}
+                    style={{ backgroundImage: url && isValidPhotoUrl(url) ? `url(${url})` : undefined }}
                   />
                 ))}
               </div>
@@ -438,6 +431,7 @@ export default function ListingDetailPage() {
             <button
               key={i}
               onClick={(e) => { e.stopPropagation(); setPhotoIdx(i); }}
+              aria-label={`View photo ${i + 1}`}
               className={`h-2.5 w-2.5 rounded-full ${
                 i === photoIdx ? "bg-paper-50" : "bg-paper-50/40"
               }`}

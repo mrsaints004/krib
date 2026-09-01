@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 /**
  * Server-side middleware for route protection.
  * Uses @supabase/ssr for reliable cookie handling (no manual parsing).
- * Reads role from user_metadata in the JWT to avoid a DB query per request.
+ * DB-verifies role for ALL protected routes to prevent JWT spoofing.
  * Enforces email verification — unconfirmed users are sent to /verify.
  */
 
@@ -16,6 +16,18 @@ const ROLE_PREFIXES: Record<string, string[]> = {
   admin: ["/admin"],
 };
 
+// Known static file extensions to bypass (instead of overly broad dot-file check)
+const STATIC_EXTENSIONS = new Set([
+  ".css", ".js", ".map", ".json", ".ico", ".png", ".jpg", ".jpeg",
+  ".gif", ".svg", ".webp", ".woff", ".woff2", ".ttf", ".eot",
+]);
+
+function hasStaticExtension(pathname: string): boolean {
+  const lastDot = pathname.lastIndexOf(".");
+  if (lastDot < 0) return false;
+  return STATIC_EXTENSIONS.has(pathname.slice(lastDot).toLowerCase());
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -25,7 +37,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon") ||
-    pathname.includes(".")
+    hasStaticExtension(pathname)
   ) {
     return NextResponse.next();
   }
@@ -61,9 +73,23 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Race getUser() against a timeout so the middleware doesn't hang forever
+  // when Supabase is unreachable (e.g. placeholder credentials during dev).
+  let user = null;
+  try {
+    const result = await Promise.race([
+      supabase.auth.getUser(),
+      new Promise<{ data: { user: null }; error: Error }>((resolve) =>
+        setTimeout(
+          () => resolve({ data: { user: null }, error: new Error("Auth timeout") }),
+          5000
+        )
+      ),
+    ]);
+    user = result.data.user;
+  } catch {
+    // Supabase unreachable — treat as unauthenticated
+  }
 
   // If no user, redirect to login for protected routes
   if (!user) {
@@ -80,8 +106,20 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/verify", req.url));
   }
 
-  // Read role from user_metadata (set at signup, avoids DB query)
-  const role = (user.user_metadata?.role as string) ?? "student";
+  // DB-verify role for ALL protected routes (not just admin) to prevent
+  // JWT metadata spoofing. One DB query per page navigation.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  // If profile lookup fails, redirect to verify page instead of
+  // granting default access. This prevents access on DB errors.
+  if (!profile?.role) {
+    return NextResponse.redirect(new URL("/verify", req.url));
+  }
+  const role = profile.role;
 
   // Check if the user is accessing a route they're allowed to access
   for (const [allowedRole, prefixes] of Object.entries(ROLE_PREFIXES)) {

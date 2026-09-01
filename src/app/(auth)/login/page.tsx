@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -25,47 +25,89 @@ export default function LoginPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // Client-side rate limiting: lock form after 5 consecutive failures
+  const failCountRef = useRef(0);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [lockCountdown, setLockCountdown] = useState(0);
+
+  const isLocked = lockedUntil !== null && Date.now() < lockedUntil;
+
+  useEffect(() => {
+    if (!lockedUntil) return;
+    const tick = () => {
+      const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setLockedUntil(null);
+        setLockCountdown(0);
+        failCountRef.current = 0;
+      } else {
+        setLockCountdown(remaining);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockedUntil]);
+
+  const recordFailure = useCallback(() => {
+    failCountRef.current += 1;
+    if (failCountRef.current >= 5) {
+      setLockedUntil(Date.now() + 30_000);
+    }
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isLocked) return;
     setError(null);
     setLoading(true);
 
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
+    let res: Response;
+    try {
+      res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch {
       setLoading(false);
-      setError("Invalid email or password. Please check your details and try again.");
+      setError("Network error. Please check your connection and try again.");
+      return;
+    }
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      setLoading(false);
+      recordFailure();
+      setError(json.error ?? "Invalid email or password. Please check your details and try again.");
       setShake(true);
       setTimeout(() => setShake(false), 500);
       return;
     }
 
-    if (data.user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .single();
+    // Set the session on the client-side Supabase instance
+    if (json.session) {
+      await supabase.auth.setSession({
+        access_token: json.session.access_token,
+        refresh_token: json.session.refresh_token,
+      });
+    }
 
-      setLoading(false);
+    // Reset failure count on success
+    failCountRef.current = 0;
+    setLoading(false);
 
-      const role = profile?.role ?? "student";
-      switch (role) {
-        case "landlord":
-          router.push("/landlord/listings");
-          break;
-        case "admin":
-          router.push("/admin/verification-queue");
-          break;
-        default:
-          router.push("/student/listings");
-      }
-    } else {
-      setLoading(false);
-      router.push("/student/listings");
+    const role = json.role ?? "student";
+    switch (role) {
+      case "landlord":
+        router.push("/landlord/listings");
+        break;
+      case "admin":
+        router.push("/admin/verification-queue");
+        break;
+      default:
+        router.push("/student/listings");
     }
   }
 
@@ -74,7 +116,7 @@ export default function LoginPage() {
       {/* Minimal top bar */}
       <header className="flex items-center justify-between py-5">
         <Link href="/" className="font-display text-xl italic text-ink-950 hover:text-verified-dark transition-colors">
-          UniNest
+          Krib
         </Link>
         <Link href="/register" className="text-sm text-ink-800 hover:text-ink-950">
           Create account
@@ -160,8 +202,12 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <Button type="submit" loading={loading} className="w-full py-3">
-          {loading ? "Logging in\u2026" : "Log in"}
+        <Button type="submit" loading={loading} disabled={isLocked} className="w-full py-3">
+          {isLocked
+            ? `Too many attempts — try again in ${lockCountdown}s`
+            : loading
+              ? "Logging in\u2026"
+              : "Log in"}
         </Button>
 
         <div className="flex items-center gap-3">
@@ -195,7 +241,7 @@ export default function LoginPage() {
       </motion.form>
 
       <p className="mt-6 text-center text-sm text-ink-800">
-        New to UniNest?{" "}
+        New to Krib?{" "}
         <Link href="/register" className="font-medium text-verified-dark underline">
           Create an account
         </Link>

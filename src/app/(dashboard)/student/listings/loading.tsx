@@ -5,7 +5,7 @@ export default function ListingsLoading() {
     <div className="min-h-screen bg-paper-50 pb-24">
       <header className="sticky top-0 z-10 border-b border-ink-900/10 bg-paper-50/95 px-5 py-4 backdrop-blur">
         <div className="flex items-center justify-between">
-          <span className="font-display text-lg italic text-ink-950">UniNest</span>
+          <span className="font-display text-lg italic text-ink-950">Krib</span>
           <div className="h-8 w-8 animate-pulse rounded-full bg-ink-900/10" />
         </div>
         <div className="mt-3 h-10 animate-pulse rounded-md bg-ink-900/5" />

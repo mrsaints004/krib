@@ -12,20 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthProvider";
-import { validateFileUpload, sanitizeFilename, ALLOWED_IMAGE_TYPES } from "@/lib/validation";
-
-const AMENITY_OPTIONS = [
-  "Water",
-  "24hr light (generator)",
-  "Fenced compound",
-  "Tiled floor",
-  "Wardrobe",
-  "Kitchen",
-  "Bathroom (ensuite)",
-  "Security gate",
-  "Parking",
-  "Fan",
-];
+import { validateFileUpload, sanitizeFilename, ALLOWED_IMAGE_TYPES, AMENITY_OPTIONS } from "@/lib/validation";
 
 const DEFECT_SEVERITIES = ["minor", "moderate", "major"] as const;
 
@@ -88,7 +75,7 @@ export default function NewListingPage() {
     setDefects((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length + photos.length > 8) {
       setError("Maximum 8 photos allowed.");
@@ -96,7 +83,7 @@ export default function NewListingPage() {
     }
     // Validate each file
     for (const f of files) {
-      const result = validateFileUpload(f, ALLOWED_IMAGE_TYPES);
+      const result = await validateFileUpload(f, ALLOWED_IMAGE_TYPES);
       if (!result.valid) {
         setError(result.error ?? "Invalid file");
         return;
@@ -125,7 +112,7 @@ export default function NewListingPage() {
     if (step === 2) {
       return !!(rentAmount && Number(rentAmount) > 0);
     }
-    return true;
+    return photos.length > 0;
   }
 
   async function handleSubmit() {
@@ -181,7 +168,16 @@ export default function NewListingPage() {
       });
 
       if (insertErr) {
-        setError(insertErr.message);
+        // Map Supabase errors to user-friendly messages
+        const msg = insertErr.message.toLowerCase();
+        if (msg.includes("check") || msg.includes("constraint")) {
+          setError("Some fields have invalid values. Please review and try again.");
+        } else if (msg.includes("permission") || msg.includes("policy")) {
+          setError("You don't have permission to create listings. Please contact support.");
+        } else {
+          setError("Failed to create listing. Please try again.");
+        }
+        console.error("Listing insert error:", insertErr.message);
         return;
       }
 
@@ -232,6 +228,7 @@ export default function NewListingPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Self-Con, Ijigbo Road"
+                maxLength={200}
                 className="mt-1 w-full rounded-md border border-ink-900/15 bg-paper-50 px-3 py-2.5 text-ink-950 outline-none focus:border-verified"
               />
             </div>
@@ -245,6 +242,7 @@ export default function NewListingPage() {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe the property — rooms, condition, what's included"
                 rows={3}
+                maxLength={5000}
                 className="mt-1 w-full rounded-md border border-ink-900/15 bg-paper-50 px-3 py-2.5 text-sm text-ink-950 outline-none focus:border-verified"
               />
             </div>
@@ -272,6 +270,7 @@ export default function NewListingPage() {
                 value={exactAddress}
                 onChange={(e) => setExactAddress(e.target.value)}
                 placeholder="Full address — only shown after booking"
+                maxLength={500}
                 className="mt-1 w-full rounded-md border border-ink-900/15 bg-paper-50 px-3 py-2.5 text-ink-950 outline-none focus:border-verified"
               />
               <p className="mt-1 text-xs text-ink-800/50">

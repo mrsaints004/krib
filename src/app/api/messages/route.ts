@@ -42,16 +42,35 @@ async function isRateLimited(userId: string): Promise<boolean> {
     .gte("created_at", windowStart);
 
   if (error) {
-    // If the count query fails, allow the message through rather than
-    // silently blocking legitimate users.
+    // Fail closed: if we can't verify the rate limit, block the request.
+    // Allowing messages through on DB errors opens a bypass vector.
     console.error("Rate limit check failed:", error.message);
-    return false;
+    return true;
   }
 
   return (count ?? 0) >= RATE_LIMIT_MAX;
 }
 
 export async function POST(req: NextRequest) {
+  // CSRF: reject requests without Origin header (browser requests always include it;
+  // non-browser clients must authenticate via Bearer token which is already checked).
+  // When Origin is present, verify it matches our allowed origins.
+  const origin = req.headers.get("origin");
+  if (!origin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const allowedOrigin =
+    process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const allowed = new Set<string>();
+  if (allowedOrigin) allowed.add(new URL(allowedOrigin).origin);
+  // Always allow same-origin in development
+  allowed.add(new URL(req.url).origin);
+
+  if (!allowed.has(origin)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

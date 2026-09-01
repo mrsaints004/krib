@@ -8,6 +8,10 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthProvider";
 import { MAX_MESSAGE_LENGTH } from "@/lib/validation";
 
+function messagesPath(role: string | undefined): string {
+  return role === "landlord" ? "/landlord/messages" : "/student/messages";
+}
+
 interface MessageRow {
   id: string;
   sender_id: string;
@@ -33,7 +37,7 @@ export default function MessageThreadPage() {
   const toast = useToast();
   const router = useRouter();
   const params = useParams();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const conversationId = params.conversationId as string;
 
   const [messages, setMessages] = useState<MessageRow[]>([]);
@@ -55,7 +59,7 @@ export default function MessageThreadPage() {
         // Verify the current user is a participant
         if (user?.id !== convo.student_id && user?.id !== convo.landlord_id) {
           toast.error("You don't have access to this conversation");
-          router.push("/student/messages");
+          router.push(messagesPath(profile?.role));
           return;
         }
 
@@ -63,12 +67,12 @@ export default function MessageThreadPage() {
 
         const otherId =
           user?.id === convo.student_id ? convo.landlord_id : convo.student_id;
-        const { data: profile } = await supabase
+        const { data: otherProfile } = await supabase
           .from("public_profile")
           .select("full_name")
           .eq("id", otherId)
           .single();
-        if (profile) setOtherName(profile.full_name);
+        if (otherProfile) setOtherName(otherProfile.full_name);
       }
 
       const { data } = await supabase
@@ -144,7 +148,7 @@ export default function MessageThreadPage() {
   return (
     <main className="flex min-h-screen flex-col bg-paper-50">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-ink-900/10 bg-paper-50/95 px-4 py-3 backdrop-blur">
-        <button onClick={() => router.back()} className="text-ink-900">
+        <button onClick={() => router.back()} aria-label="Go back" className="text-ink-900">
           <ArrowLeft size={20} />
         </button>
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-900/10">
@@ -234,6 +238,7 @@ export default function MessageThreadPage() {
         <button
           onClick={handleSend}
           disabled={sending || !draft.trim()}
+          aria-label="Send message"
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-verified text-paper-50 disabled:opacity-40"
         >
           <Send size={16} />

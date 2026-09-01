@@ -50,17 +50,33 @@ export default function AdminVerificationQueuePage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
+    // Gate data fetch on admin role — don't load data until we know the user is admin
+    if (authLoading) return;
+    if (profile?.role !== "admin") return;
     loadDocs();
-  }, []);
+  }, [authLoading, profile?.role]);
 
-  async function loadDocs() {
+  const PAGE_SIZE = 30;
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  async function loadDocs(offset = 0, append = false) {
     const { data } = await supabase
       .from("verification_documents")
       .select("id, profile_id, document_type, file_url, note, status, review_note, created_at, profiles(full_name, email)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
 
-    setDocs((data ?? []) as unknown as VerificationDoc[]);
+    const rows = (data ?? []) as unknown as VerificationDoc[];
+    setHasMore(rows.length === PAGE_SIZE);
+    setDocs((prev) => (append ? [...prev, ...rows] : rows));
     setLoading(false);
+  }
+
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    await loadDocs(docs.length, true);
+    setLoadingMore(false);
   }
 
   const pending = docs.filter((d) => d.status === "pending");
@@ -127,7 +143,7 @@ export default function AdminVerificationQueuePage() {
   async function handleViewDocument(fileUrl: string) {
     const { data } = await supabase.storage
       .from("verification-documents")
-      .createSignedUrl(fileUrl, 300);
+      .createSignedUrl(fileUrl, 1800); // 30 minutes for admin review
     if (data?.signedUrl) {
       window.open(data.signedUrl, "_blank");
     } else {
@@ -294,6 +310,14 @@ export default function AdminVerificationQueuePage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {hasMore && (
+            <div className="mt-4 flex justify-center">
+              <Button variant="ghost" loading={loadingMore} onClick={handleLoadMore}>
+                Load more
+              </Button>
             </div>
           )}
         </div>

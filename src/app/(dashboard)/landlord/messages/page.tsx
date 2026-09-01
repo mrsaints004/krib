@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthProvider";
 import { MessageListSkeleton } from "@/components/skeletons/MessageListSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Button } from "@/components/ui/Button";
 
 interface ConversationRow {
   id: string;
@@ -20,6 +21,8 @@ interface LastMessage {
   content: string;
   created_at: string;
 }
+
+const PAGE_SIZE = 20;
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -42,50 +45,117 @@ export default function LandlordMessagesPage() {
   const [names, setNames] = useState<Record<string, string>>({});
   const [lastMessages, setLastMessages] = useState<Record<string, LastMessage>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+
+  async function fetchConversations(offset: number, append: boolean) {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("conversations")
+      .select("id, listing_id, student_id, created_at, listings(title)")
+      .eq("landlord_id", user.id)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    const convos = (data ?? []) as unknown as ConversationRow[];
+    setHasMore(convos.length === PAGE_SIZE);
+
+    setConversations((prev) => (append ? [...prev, ...convos] : convos));
+
+    // Fetch student names
+    const studentIds = [...new Set(convos.map((c) => c.student_id))];
+    if (studentIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("public_profile")
+        .select("id, full_name")
+        .in("id", studentIds);
+      const map: Record<string, string> = {};
+      for (const p of profiles ?? []) map[p.id] = p.full_name;
+      setNames((prev) => ({ ...prev, ...map }));
+    }
+
+    // Batch fetch last messages (avoids N+1)
+    if (convos.length > 0) {
+      const convoIds = convos.map((c) => c.id);
+      const { data: allMsgs } = await supabase
+        .from("messages")
+        .select("conversation_id, content, created_at")
+        .in("conversation_id", convoIds)
+        .order("created_at", { ascending: false });
+
+      const msgMap: Record<string, LastMessage> = {};
+      for (const msg of allMsgs ?? []) {
+        if (!msgMap[msg.conversation_id]) {
+          msgMap[msg.conversation_id] = {
+            content: msg.content,
+            created_at: msg.created_at,
+          };
+        }
+      }
+      setLastMessages((prev) => ({ ...prev, ...msgMap }));
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
-    async function load() {
-      const { data } = await supabase
-        .from("conversations")
-        .select("id, listing_id, student_id, created_at, listings(title)")
-        .eq("landlord_id", user!.id)
-        .order("created_at", { ascending: false });
-
-      const convos = (data ?? []) as unknown as ConversationRow[];
-      setConversations(convos);
-
-      // Fetch student names
-      const studentIds = [...new Set(convos.map((c) => c.student_id))];
-      if (studentIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from("public_profile")
-          .select("id, full_name")
-          .in("id", studentIds);
-        const map: Record<string, string> = {};
-        for (const p of profiles ?? []) map[p.id] = p.full_name;
-        setNames(map);
-      }
-
-      // Fetch last messages
-      const msgMap: Record<string, LastMessage> = {};
-      for (const c of convos) {
-        const { data: msgs } = await supabase
-          .from("messages")
-          .select("content, created_at")
-          .eq("conversation_id", c.id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-        if (msgs && msgs.length > 0) {
-          msgMap[c.id] = msgs[0] as LastMessage;
-        }
-      }
-      setLastMessages(msgMap);
-
-      setLoading(false);
-    }
-    load();
+    fetchConversations(0, false).then(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // Real-time: listen for new messages and update last message + reorder
+  useEffect(() => {
+    if (!user || conversations.length === 0) return;
+
+    const channel = supabase
+      .channel("landlord-conversations-list")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        },
+        (payload) => {
+          const msg = payload.new as {
+            conversation_id: string;
+            content: string;
+            created_at: string;
+          };
+          const convoExists = conversations.some((c) => c.id === msg.conversation_id);
+          if (!convoExists) return;
+
+          setLastMessages((prev) => ({
+            ...prev,
+            [msg.conversation_id]: {
+              content: msg.content,
+              created_at: msg.created_at,
+            },
+          }));
+
+          setConversations((prev) => {
+            const idx = prev.findIndex((c) => c.id === msg.conversation_id);
+            if (idx <= 0) return prev;
+            const updated = [...prev];
+            const moved = updated.splice(idx, 1)[0];
+            if (moved) updated.unshift(moved);
+            return updated;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, conversations.length]);
+
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    await fetchConversations(conversations.length, true);
+    setLoadingMore(false);
+  }
 
   return (
     <main className="min-h-screen bg-paper-50 pb-24 md:pb-0">
@@ -146,6 +216,14 @@ export default function LandlordMessagesPage() {
                 </Link>
               );
             })}
+          </div>
+        )}
+
+        {!loading && hasMore && (
+          <div className="mt-4 flex justify-center pb-4">
+            <Button variant="ghost" loading={loadingMore} onClick={handleLoadMore}>
+              Load more
+            </Button>
           </div>
         )}
       </div>

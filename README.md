@@ -1,4 +1,4 @@
-# UniNest
+# Krib
 
 A trusted platform for Nigerian university students to find, book, and manage verified off-campus housing.
 
@@ -38,8 +38,8 @@ A trusted platform for Nigerian university students to find, book, and manage ve
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/uninest.git
-   cd uninest
+   git clone https://github.com/YOUR_USERNAME/krib.git
+   cd krib
    ```
 
 2. Install dependencies:
@@ -60,6 +60,8 @@ A trusted platform for Nigerian university students to find, book, and manage ve
    ```
 
 5. Run the database migrations in your Supabase project (files in `supabase/migrations/`, apply in order).
+
+6. Set up Supabase Storage buckets (see [Supabase Storage Setup](#supabase-storage-setup) below).
 
 6. Start the development server:
    ```bash
@@ -96,6 +98,23 @@ src/
 supabase/
   migrations/     # SQL schema, RLS policies, triggers
 ```
+
+## Supabase Storage Setup
+
+Create two storage buckets in your Supabase project (Storage > New bucket):
+
+| Bucket | Public? | Purpose |
+|--------|---------|---------|
+| `listing-photos` | Yes (public) | Listing images, maintenance request photos |
+| `verification-documents` | No (private) | ID documents, proof of ownership uploads |
+
+For `listing-photos`, enable public access so images can be served directly. `verification-documents` should remain private — files are accessed via signed URLs generated server-side.
+
+## Auth Rate Limiting
+
+The app includes client-side rate limiting (5 failures → 30-second lockout) on login and registration forms. For production, also configure server-side rate limits in your Supabase dashboard:
+
+- **Supabase Dashboard > Authentication > Rate Limits** — set limits for sign-in, sign-up, and password reset requests per hour.
 
 ## Architecture
 

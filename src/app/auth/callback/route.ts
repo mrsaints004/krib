@@ -6,17 +6,36 @@ export async function GET(req: NextRequest) {
   const code = searchParams.get("code");
 
   // Validate `next` param to prevent open redirect attacks.
-  // Only allow relative paths starting with "/" — reject absolute URLs,
-  // protocol-relative URLs (//evil.com), and anything else.
+  // Parse through URL constructor and verify hostname matches our app.
   const rawNext = searchParams.get("next") ?? "/";
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
+  let next = "/";
+  if (rawNext.startsWith("/") && !rawNext.startsWith("//")) {
+    // Additional safety: parse as full URL and verify hostname matches
+    try {
+      const parsed = new URL(rawNext, req.url);
+      const appUrl = new URL(req.url);
+      if (parsed.hostname === appUrl.hostname) {
+        next = parsed.pathname + parsed.search + parsed.hash;
+      }
+    } catch {
+      // Invalid URL — fall back to "/"
+    }
+  }
+
+  // Validate env vars at runtime instead of using ! assertions
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
 
   if (code) {
     let response = NextResponse.redirect(new URL(next, req.url));
 
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      supabaseUrl,
+      supabaseKey,
       {
         cookies: {
           getAll() {
@@ -52,12 +71,16 @@ export async function GET(req: NextRequest) {
         .single();
 
       if (!profile) {
-        await supabase.from("profiles").insert({
+        const { error: insertError } = await supabase.from("profiles").insert({
           id: data.user.id,
           full_name: data.user.user_metadata?.full_name ?? data.user.user_metadata?.name ?? "",
           phone: "",
           role: "student",
         });
+
+        if (insertError) {
+          console.error("Failed to create profile on OAuth callback:", insertError.message);
+        }
       }
 
       return NextResponse.redirect(new URL(redirectTo, req.url));

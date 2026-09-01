@@ -9,11 +9,11 @@ import {
   XCircle,
   CreditCard,
   Calendar,
-  Copy,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthProvider";
+import { isValidPhotoUrl } from "@/lib/validation";
 import { useToast } from "@/components/ui/Toast";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -61,30 +61,46 @@ function statusDisplay(status: string) {
   }
 }
 
+const PAGE_SIZE = 20;
+
 export default function StudentBookingsPage() {
   const { user } = useAuth();
   const router = useRouter();
   const toast = useToast();
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [payDialogBooking, setPayDialogBooking] = useState<BookingRow | null>(null);
+  const [payLoading, setPayLoading] = useState(false);
+
+  async function loadBookings(offset: number, append: boolean) {
+    if (!user) return;
+    const { data } = await supabase
+      .from("bookings")
+      .select(
+        "id, listing_id, rent_amount, facilitation_fee, total_amount, status, payment_status, created_at, listings(title, area_description, rent_period, photo_urls)"
+      )
+      .eq("student_id", user.id)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    const rows = (data as unknown as BookingRow[]) ?? [];
+    setHasMore(rows.length === PAGE_SIZE);
+    setBookings((prev) => (append ? [...prev, ...rows] : rows));
+  }
 
   useEffect(() => {
     if (!user) return;
-    async function load() {
-      const { data } = await supabase
-        .from("bookings")
-        .select(
-          "id, listing_id, rent_amount, facilitation_fee, total_amount, status, payment_status, created_at, listings(title, area_description, rent_period, photo_urls)"
-        )
-        .eq("student_id", user!.id)
-        .order("created_at", { ascending: false });
-
-      setBookings((data as unknown as BookingRow[]) ?? []);
-      setLoading(false);
-    }
-    load();
+    loadBookings(0, false).then(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    await loadBookings(bookings.length, true);
+    setLoadingMore(false);
+  }
 
   return (
     <main className="min-h-screen bg-paper-50 pb-24 md:pb-0">
@@ -117,7 +133,7 @@ export default function StudentBookingsPage() {
                   key={booking.id}
                   className="overflow-hidden rounded-lg border border-ink-900/10"
                 >
-                  {listing?.photo_urls?.length > 0 ? (
+                  {listing?.photo_urls?.[0] && isValidPhotoUrl(listing.photo_urls[0]) ? (
                     <div
                       className="aspect-[3/1] bg-ink-900 bg-cover bg-center"
                       style={{ backgroundImage: `url(${listing.photo_urls[0]})` }}
@@ -185,57 +201,101 @@ export default function StudentBookingsPage() {
             })}
           </div>
         )}
+
+        {!loading && hasMore && (
+          <div className="mt-4 flex justify-center">
+            <Button variant="ghost" loading={loadingMore} onClick={handleLoadMore}>
+              Load more
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* Payment instructions dialog */}
+      {/* Payment dialog */}
       <Dialog
         open={!!payDialogBooking}
         onClose={() => setPayDialogBooking(null)}
         maxWidth="max-w-md"
       >
-        <DialogTitle>Payment instructions</DialogTitle>
+        <DialogTitle>Complete payment</DialogTitle>
         <DialogDescription>
-          Transfer the total amount to the UniNest escrow account below. Your funds are held safely until you confirm move-in.
+          You&apos;ll be redirected to Paystack to complete your payment securely. Your funds are held in escrow until you confirm move-in.
         </DialogDescription>
 
         {payDialogBooking && (
           <div className="mt-4 space-y-3">
             <div className="rounded-md bg-ink-900/5 p-4 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-ink-800">Amount</span>
+                <span className="text-ink-800">Rent</span>
                 <span className="font-mono font-medium text-ink-950">
-                  {formatNaira(payDialogBooking.total_amount)}
+                  {formatNaira(payDialogBooking.rent_amount)}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-ink-800">Reference</span>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(payDialogBooking.id.slice(0, 8).toUpperCase());
-                    toast.success("Reference copied");
-                  }}
-                  className="flex items-center gap-1 font-mono text-xs text-verified-dark"
-                >
-                  {payDialogBooking.id.slice(0, 8).toUpperCase()}
-                  <Copy size={12} />
-                </button>
+                <span className="text-ink-800">Facilitation fee</span>
+                <span className="font-mono font-medium text-ink-950">
+                  {formatNaira(payDialogBooking.facilitation_fee)}
+                </span>
               </div>
-            </div>
-
-            <div className="rounded-md border border-ink-900/10 p-4 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-800/60">Bank details</p>
-              <p className="text-sm text-ink-950">UniNest Escrow Ltd</p>
-              <p className="text-sm text-ink-800">Access Bank — 0123456789</p>
-              <p className="mt-2 text-xs text-ink-800/50">
-                Include your reference code in the transfer narration.
-              </p>
+              <div className="flex justify-between border-t border-ink-900/10 pt-2 text-sm">
+                <span className="font-medium text-ink-950">Total</span>
+                <span className="font-mono font-semibold text-ink-950">
+                  {formatNaira(payDialogBooking.total_amount)}
+                </span>
+              </div>
             </div>
           </div>
         )}
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => setPayDialogBooking(null)} className="flex-1">
-            Close
+            Cancel
+          </Button>
+          <Button
+            loading={payLoading}
+            className="flex-1"
+            onClick={async () => {
+              if (!payDialogBooking) return;
+              setPayLoading(true);
+              try {
+                const session = await supabase.auth.getSession();
+                const token = session.data.session?.access_token;
+                if (!token) {
+                  toast.error("Please log in again.");
+                  return;
+                }
+                const res = await fetch("/api/payments/initialize", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({ bookingId: payDialogBooking.id }),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                  toast.error(data.error ?? "Payment initialization failed.");
+                  return;
+                }
+                // Validate Paystack redirect URL before navigating
+                const authUrl = data.authorization_url as string;
+                if (
+                  !authUrl ||
+                  !(authUrl.startsWith("https://checkout.paystack.com/") ||
+                    authUrl.startsWith("https://paystack.com/"))
+                ) {
+                  toast.error("Invalid payment URL received. Please contact support.");
+                  return;
+                }
+                window.location.href = authUrl;
+              } catch {
+                toast.error("Something went wrong. Please try again.");
+              } finally {
+                setPayLoading(false);
+              }
+            }}
+          >
+            Pay with Paystack
           </Button>
         </DialogFooter>
       </Dialog>

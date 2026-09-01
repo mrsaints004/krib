@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -31,6 +31,14 @@ export default function VerifyPage() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const previewRef = useRef<string | null>(null);
+
+  // Revoke object URL on unmount to prevent memory leak
+  useEffect(() => {
+    return () => {
+      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -42,17 +50,21 @@ export default function VerifyPage() {
     });
   }, [router]);
 
-  const handleFile = useCallback((f: File) => {
-    const result = validateFileUpload(f, ALLOWED_DOC_TYPES);
+  const handleFile = useCallback(async (f: File) => {
+    const result = await validateFileUpload(f, ALLOWED_DOC_TYPES);
     if (!result.valid) {
       setError(result.error ?? "Invalid file");
       return;
     }
     setError(null);
     setFile(f);
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
     if (f.type.startsWith("image/")) {
-      setPreview(URL.createObjectURL(f));
+      const url = URL.createObjectURL(f);
+      previewRef.current = url;
+      setPreview(url);
     } else {
+      previewRef.current = null;
       setPreview(null);
     }
   }, []);
@@ -142,10 +154,10 @@ export default function VerifyPage() {
           className="mt-2 text-sm text-ink-800"
         >
           An admin will review your document. This isn&apos;t instant — you can
-          keep using UniNest while you wait.
+          keep using Krib while you wait.
         </motion.p>
         <Button onClick={() => router.push("/")} className="mt-8">
-          Continue to UniNest
+          Continue to Krib
         </Button>
       </main>
     );
@@ -156,7 +168,7 @@ export default function VerifyPage() {
       {/* Minimal top bar */}
       <header className="flex items-center justify-between py-5">
         <Link href="/" className="font-display text-xl italic text-ink-950 hover:text-verified-dark transition-colors">
-          UniNest
+          Krib
         </Link>
         <Link href="/login" className="text-sm text-ink-800 hover:text-ink-950">
           Log in

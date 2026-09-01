@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthProvider";
+import { isValidPhotoUrl } from "@/lib/validation";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ListingCardSkeleton } from "@/components/skeletons/ListingCardSkeleton";
@@ -76,7 +77,7 @@ export default function LandlordListingsPage() {
   }, [user]);
 
   async function handleDelete(id: string) {
-    const { error } = await supabase.from("listings").delete().eq("id", id);
+    const { error } = await supabase.from("listings").delete().eq("id", id).eq("landlord_id", user!.id);
     if (error) {
       toast.error("Failed to delete listing");
     } else {
@@ -90,7 +91,8 @@ export default function LandlordListingsPage() {
     const { error } = await supabase
       .from("listings")
       .update({ status: "archived" })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("landlord_id", user!.id);
     if (error) {
       toast.error("Failed to deactivate");
     } else {
@@ -112,7 +114,7 @@ export default function LandlordListingsPage() {
       <main className="min-h-screen bg-paper-50 pb-24 md:pb-0">
         <header className="sticky top-0 z-10 border-b border-ink-900/10 bg-paper-50/95 px-5 py-4 backdrop-blur">
           <div className="flex items-center justify-between">
-            <span className="font-display text-lg italic text-ink-950 md:hidden">UniNest</span>
+            <span className="font-display text-lg italic text-ink-950 md:hidden">Krib</span>
             <h1 className="hidden font-display text-lg text-ink-950 md:block">My Listings</h1>
           </div>
         </header>
@@ -130,7 +132,7 @@ export default function LandlordListingsPage() {
       <main className="min-h-screen bg-paper-50 pb-24 md:pb-0">
         <header className="sticky top-0 z-10 border-b border-ink-900/10 bg-paper-50/95 px-5 py-4 backdrop-blur">
           <div className="flex items-center justify-between">
-            <span className="font-display text-lg italic text-ink-950 md:hidden">UniNest</span>
+            <span className="font-display text-lg italic text-ink-950 md:hidden">Krib</span>
             <h1 className="hidden font-display text-lg text-ink-950 md:block">My Listings</h1>
             <Link
               href="/landlord/listings/new"
@@ -179,10 +181,12 @@ export default function LandlordListingsPage() {
                     className="relative overflow-hidden rounded-lg border border-ink-900/10"
                   >
                     <Link href={`/landlord/listings/${listing.id}`} className="block">
-                      {listing.photo_urls.length > 0 ? (
+                      {listing.photo_urls.length > 0 && isValidPhotoUrl(listing.photo_urls[0]) ? (
                         <div
+                          role="img"
+                          aria-label={`Photo of ${listing.title}`}
                           className="aspect-[16/9] bg-ink-900 bg-cover bg-center"
-                          style={{ backgroundImage: `url(${listing.photo_urls[0]})` }}
+                          style={{ backgroundImage: `url(${encodeURI(listing.photo_urls[0]!)})` }}
                         />
                       ) : (
                         <div className="flex aspect-[16/9] items-center justify-center bg-ink-900/5">
@@ -209,6 +213,9 @@ export default function LandlordListingsPage() {
                         e.preventDefault();
                         setMenuOpen(menuOpen === listing.id ? null : listing.id);
                       }}
+                      aria-label="Listing actions"
+                      aria-haspopup="true"
+                      aria-expanded={menuOpen === listing.id}
                       className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-ink-950/60 text-paper-50 backdrop-blur hover:bg-ink-950/80"
                     >
                       <MoreVertical size={16} />
@@ -216,7 +223,7 @@ export default function LandlordListingsPage() {
 
                     {/* Dropdown menu */}
                     {menuOpen === listing.id && (
-                      <div className="absolute right-2 top-12 z-10 w-40 rounded-md border border-ink-900/10 bg-paper-50 py-1 shadow-lg">
+                      <div role="menu" className="absolute right-2 top-12 z-10 w-40 rounded-md border border-ink-900/10 bg-paper-50 py-1 shadow-lg">
                         <Link
                           href={`/landlord/listings/${listing.id}`}
                           className="flex items-center gap-2 px-3 py-2 text-sm text-ink-800 hover:bg-ink-900/5"

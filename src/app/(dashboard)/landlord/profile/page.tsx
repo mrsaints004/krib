@@ -8,6 +8,7 @@ import { LogOut, ShieldCheck, ShieldX, Pencil, Save, X, Building2, CreditCard } 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
+import { validatePhone } from "@/lib/validation";
 
 export default function LandlordProfilePage() {
   const toast = useToast();
@@ -26,12 +27,23 @@ export default function LandlordProfilePage() {
 
   async function handleSave() {
     if (!user) return;
+
+    const trimmedName = editName.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      toast.error("Name must be at least 2 characters.");
+      return;
+    }
+    if (editPhone && !validatePhone(editPhone)) {
+      toast.error("Please enter a valid Nigerian phone number.");
+      return;
+    }
+
     setSaving(true);
 
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ full_name: editName, phone: editPhone })
+        .update({ full_name: trimmedName, phone: editPhone })
         .eq("id", user.id);
 
       if (error) {

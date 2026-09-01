@@ -6,7 +6,7 @@
   :root {
     color-scheme: light;
 
-    /* shadcn CSS variables mapped to UniNest tokens */
+    /* shadcn CSS variables mapped to Krib tokens */
     --background: 40 33% 96%; /* paper-50 #F7F5F0 */
     --foreground: 218 30% 9%; /* ink-900 #12151B */
 
