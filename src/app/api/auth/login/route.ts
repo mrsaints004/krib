@@ -85,12 +85,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Return only the access token — NOT the refresh token.
-  // The refresh token is managed via Supabase's cookie-based auth.
   return NextResponse.json(
     {
-      access_token: data.session.access_token,
-      expires_at: data.session.expires_at,
+      session: {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      },
       role: profile.role,
     },
     {
