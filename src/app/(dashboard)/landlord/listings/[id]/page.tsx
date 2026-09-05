@@ -100,7 +100,10 @@ export default function EditListingPage() {
         setDescription(d.description);
         setAreaDescription(d.area_description);
         setExactAddress(d.exact_address || "");
-        setDistanceToCampus(String(d.distance_to_campus_km));
+        // Map existing km to nearest dropdown option
+        const km = d.distance_to_campus_km;
+        const mapped = km <= 0.4 ? "0.4" : km <= 0.8 ? "0.8" : km <= 1.2 ? "1.2" : km <= 2.0 ? "2.0" : "3.5";
+        setDistanceToCampus(mapped);
         setRentAmount(String(Math.round(d.rent_amount / 100)));
         setRentPeriod(d.rent_period);
         setGenderPreference(d.gender_preference);
@@ -254,13 +257,23 @@ export default function EditListingPage() {
           value={exactAddress}
           onChange={(e) => setExactAddress(e.target.value)}
         />
-        <Input
-          label="Distance to campus (km)"
-          type="number"
-          step="0.1"
-          value={distanceToCampus}
-          onChange={(e) => setDistanceToCampus(e.target.value)}
-        />
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wide text-ink-900">
+            Distance to campus
+          </label>
+          <select
+            value={distanceToCampus}
+            onChange={(e) => setDistanceToCampus(e.target.value)}
+            className="mt-1 w-full rounded-md border border-ink-900/15 bg-paper-50 px-3 py-2.5 text-ink-950 outline-none focus:border-verified"
+          >
+            <option value="">Select walking distance</option>
+            <option value="0.4">Under 5 min walk</option>
+            <option value="0.8">5–10 min walk</option>
+            <option value="1.2">10–15 min walk</option>
+            <option value="2.0">15–30 min walk</option>
+            <option value="3.5">30+ min walk</option>
+          </select>
+        </div>
         <Input
           label="Rent amount (Naira)"
           type="number"

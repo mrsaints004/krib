@@ -280,17 +280,20 @@ export default function NewListingPage() {
 
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-ink-900">
-                Distance to campus (km)
+                Distance to campus
               </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
+              <select
                 value={distanceToCampus}
                 onChange={(e) => setDistanceToCampus(e.target.value)}
-                placeholder="e.g. 1.5"
                 className="mt-1 w-full rounded-md border border-ink-900/15 bg-paper-50 px-3 py-2.5 text-ink-950 outline-none focus:border-verified"
-              />
+              >
+                <option value="">Select walking distance</option>
+                <option value="0.4">Under 5 min walk</option>
+                <option value="0.8">5–10 min walk</option>
+                <option value="1.2">10–15 min walk</option>
+                <option value="2.0">15–30 min walk</option>
+                <option value="3.5">30+ min walk</option>
+              </select>
             </div>
           </div>
         )}
@@ -519,7 +522,14 @@ export default function NewListingPage() {
               </div>
               <div>
                 <span className="text-xs font-semibold uppercase text-ink-800/60">Distance</span>
-                <p className="text-sm text-ink-950">{distanceToCampus} km to campus</p>
+                <p className="text-sm text-ink-950">
+                  {distanceToCampus === "0.4" ? "Under 5 min walk" :
+                   distanceToCampus === "0.8" ? "5–10 min walk" :
+                   distanceToCampus === "1.2" ? "10–15 min walk" :
+                   distanceToCampus === "2.0" ? "15–30 min walk" :
+                   distanceToCampus === "3.5" ? "30+ min walk" :
+                   `${distanceToCampus} km`} to campus
+                </p>
               </div>
               <div>
                 <span className="text-xs font-semibold uppercase text-ink-800/60">Gender</span>

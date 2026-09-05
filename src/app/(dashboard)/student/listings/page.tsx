@@ -25,6 +25,14 @@ interface ListingRow {
   defects: { description: string; severity: string }[];
 }
 
+function formatWalkTime(km: number): string {
+  if (km <= 0.4) return "< 5 min";
+  if (km <= 0.8) return "5–10 min";
+  if (km <= 1.2) return "10–15 min";
+  if (km <= 2.0) return "15–30 min";
+  return "30+ min";
+}
+
 function formatRent(kobo: number, period: string): string {
   const naira = Math.round(kobo / 100);
   const formatted = new Intl.NumberFormat("en-NG").format(naira);
@@ -280,39 +288,41 @@ export default function StudentListingsPage() {
                 className="block transition-transform active:scale-[0.98]"
               >
                 <BracketFrame>
-                  <div className="relative overflow-hidden rounded-lg border border-ink-900/10 bg-ink-950">
-                    {listing.photo_urls.length > 0 && isValidPhotoUrl(listing.photo_urls[0]) ? (
-                      <div
-                        role="img"
-                        aria-label={`Photo of ${listing.title}`}
-                        className="aspect-[16/10] bg-ink-900 bg-cover bg-center"
-                        style={{ backgroundImage: `url(${encodeURI(listing.photo_urls[0]!)})` }}
-                      />
-                    ) : (
-                      <div className="flex aspect-[16/10] items-center justify-center bg-ink-900">
-                        <span className="text-xs text-paper-100/40">No photo</span>
-                      </div>
-                    )}
-                    <button
-                      onClick={(e) => toggleFavorite(listing.id, e)}
-                      aria-label={favorites.has(listing.id) ? "Remove from favorites" : "Add to favorites"}
-                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-ink-950/60 backdrop-blur"
-                    >
-                      <Heart
-                        size={16}
-                        className={
-                          favorites.has(listing.id)
-                            ? "fill-signal text-signal"
-                            : "text-paper-50"
-                        }
-                      />
-                    </button>
+                  <div className="overflow-hidden rounded-lg border border-ink-900/10 bg-ink-950">
+                    <div className="relative">
+                      {listing.photo_urls.length > 0 && isValidPhotoUrl(listing.photo_urls[0]) ? (
+                        <div
+                          role="img"
+                          aria-label={`Photo of ${listing.title}`}
+                          className="aspect-[16/10] bg-ink-900 bg-cover bg-center"
+                          style={{ backgroundImage: `url(${encodeURI(listing.photo_urls[0]!)})` }}
+                        />
+                      ) : (
+                        <div className="flex aspect-[16/10] items-center justify-center bg-ink-900">
+                          <span className="text-xs text-paper-100/40">No photo</span>
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => toggleFavorite(listing.id, e)}
+                        aria-label={favorites.has(listing.id) ? "Remove from favorites" : "Add to favorites"}
+                        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-ink-950/60 backdrop-blur"
+                      >
+                        <Heart
+                          size={16}
+                          className={
+                            favorites.has(listing.id)
+                              ? "fill-signal text-signal"
+                              : "text-paper-50"
+                          }
+                        />
+                      </button>
 
-                    {/* Distance badge */}
-                    <div className="absolute bottom-3 left-3 rounded-full bg-ink-950/70 px-2.5 py-1 backdrop-blur">
-                      <span className="font-mono text-xs text-paper-50">
-                        {listing.distance_to_campus_km} km
-                      </span>
+                      {/* Distance badge */}
+                      <div className="absolute bottom-3 left-3 rounded-full bg-ink-950/70 px-2.5 py-1 backdrop-blur">
+                        <span className="font-mono text-xs text-paper-50">
+                          {formatWalkTime(listing.distance_to_campus_km)} walk
+                        </span>
+                      </div>
                     </div>
 
                     <div className="p-4">
